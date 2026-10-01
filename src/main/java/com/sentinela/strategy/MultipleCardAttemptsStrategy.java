@@ -4,15 +4,17 @@ import com.sentinela.dto.TransactionRequest;
 import org.springframework.stereotype.Component;
 
 @Component
-public class ForeignCountryStrategy implements RiskStrategy {
+public class MultipleCardAttemptsStrategy implements RiskStrategy {
+
+    private static final int ATTEMPT_THRESHOLD = 3;
 
     @Override
     public String ruleId() {
-        return "FOREIGN_COUNTRY";
+        return "MULTIPLE_CARD_ATTEMPTS";
     }
 
     @Override
     public int calculate(TransactionRequest request) {
-        return !"BR".equalsIgnoreCase(request.country()) ? 20 : 0;
+        return request.cardAttempts() >= ATTEMPT_THRESHOLD ? 25 : 0;
     }
 }

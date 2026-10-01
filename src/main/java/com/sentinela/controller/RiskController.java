@@ -3,6 +3,7 @@ package com.sentinela.controller;
 import com.sentinela.dto.RiskResponse;
 import com.sentinela.dto.TransactionRequest;
 import com.sentinela.service.RiskAnalysisService;
+import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -16,7 +17,7 @@ public class RiskController {
     }
 
     @PostMapping("/analyze")
-    public RiskResponse analyze(@RequestBody TransactionRequest request) {
+    public RiskResponse analyze(@Valid @RequestBody TransactionRequest request) {
         return service.analyze(request);
     }
 }
