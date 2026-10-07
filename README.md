@@ -34,6 +34,23 @@ docker compose --profile app up --build
 
 O Compose inicia PostgreSQL, RabbitMQ, Redis, API, worker, Prometheus, Grafana, Jaeger e OpenTelemetry Collector. As portas publicadas ficam vinculadas a `127.0.0.1`. Os valores padrão são somente para desenvolvimento local; configure segredos próprios fora desse cenário.
 
+### Kubernetes local
+
+O overlay em `deploy/kubernetes/local` roda API, worker, PostgreSQL, RabbitMQ e Redis em um cluster local. Ele usa Secrets gerados de um arquivo ignorado pelo Git:
+
+```powershell
+Copy-Item deploy/kubernetes/local/secrets.env.example deploy/kubernetes/local/secrets.env
+# Edite secrets.env e substitua todas as senhas de exemplo.
+docker build -t sentinela:local .
+kind load docker-image sentinela:local
+kubectl apply -k deploy/kubernetes/local
+kubectl -n sentinela port-forward service/sentinela-api 8080:8080
+```
+
+O serviço da API é ClusterIP; não há Ingress público neste overlay. Para AWS/produção, não reutilize esses valores nem esse armazenamento single-replica: use um gestor de segredos, TLS no gateway e serviços gerenciados com backup, recuperação e custos avaliados.
+
+Existe um modelo de Ingress em `deploy/kubernetes/production/ingress.yaml` para NGINX Ingress, com redirecionamento HTTPS e limite inicial de 10 requisições/s por IP. Antes de aplicar, configure um domínio real e o Secret TLS `sentinela-api-tls` (preferencialmente via cert-manager). O limite é por IP e deve ser calibrado com tráfego legítimo; ele não substitui limites por cliente no gateway/IdP. Em produção, ative `SPRING_PROFILES_ACTIVE=api,prod` para desativar OpenAPI e Swagger UI.
+
 A API exige HTTP Basic e associa cada transação ao usuário autenticado. Defina `API_USERNAME` e `API_PASSWORD` para um cliente ou `API_CLIENTS_JSON` para cadastrar vários clientes, por exemplo `{"cliente-a":"segredo-a","cliente-b":"segredo-b"}`. O verificador usa BCrypt e não grava credenciais no banco. O endpoint retorna `404` se o cliente autenticado tentar consultar uma transação de outro cliente; a chave de idempotência é única por cliente.
 
 A migração V4 atribui registros existentes ao proprietário `legacy`, pois o sistema anterior não guardava essa informação. Antes de migrar dados de produção, mapeie cada registro ao cliente correto; não dê acesso à identidade `legacy` sem revisar esse mapeamento.

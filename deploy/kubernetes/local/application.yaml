@@ -1,0 +1,224 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinela-api
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentinela-api
+  template:
+    metadata:
+      labels:
+        app: sentinela-api
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: api
+          image: sentinela:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: http
+              containerPort: 8080
+            - name: management
+              containerPort: 8081
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: api
+            - name: DATABASE_URL
+              value: jdbc:postgresql://postgres:5432/sentinela
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: DATABASE_USER
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: DATABASE_PASSWORD
+            - name: RABBITMQ_HOST
+              value: rabbitmq
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: REDIS_HOST
+              value: redis
+            - name: API_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: API_USERNAME
+            - name: API_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: API_PASSWORD
+            - name: TRACING_SAMPLING
+              value: "0.0"
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinela-api
+spec:
+  type: ClusterIP
+  selector:
+    app: sentinela-api
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+    - name: management
+      port: 8081
+      targetPort: management
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sentinela-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sentinela-worker
+  template:
+    metadata:
+      labels:
+        app: sentinela-worker
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 10001
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: worker
+          image: sentinela:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - name: management
+              containerPort: 8081
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: worker
+            - name: DATABASE_URL
+              value: jdbc:postgresql://postgres:5432/sentinela
+            - name: DATABASE_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: DATABASE_USER
+            - name: DATABASE_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: DATABASE_PASSWORD
+            - name: RABBITMQ_HOST
+              value: rabbitmq
+            - name: RABBITMQ_USER
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: RABBITMQ_USER
+            - name: RABBITMQ_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: sentinela-secrets
+                  key: RABBITMQ_PASSWORD
+            - name: REDIS_HOST
+              value: redis
+            - name: TRACING_SAMPLING
+              value: "0.0"
+          startupProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+            failureThreshold: 30
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: management
+            periodSeconds: 5
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: management
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "1"
+              memory: 768Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: [ALL]
+          volumeMounts:
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: tmp
+          emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sentinela-worker
+spec:
+  type: ClusterIP
+  selector:
+    app: sentinela-worker
+  ports:
+    - name: management
+      port: 8081
+      targetPort: management

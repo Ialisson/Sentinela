@@ -197,6 +197,17 @@ class TransactionApiTests {
                 .andExpect(status().isNotFound());
     }
 
+    @Test
+    void publishesOpenApiContractForAuthenticatedTransactionEndpoints() throws Exception {
+        mockMvc.perform(get("/v3/api-docs"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.openapi").exists())
+                .andExpect(jsonPath("$.paths['/api/v2/transactions'].post.responses['202']").exists())
+                .andExpect(jsonPath("$.paths['/api/v2/transactions/{transactionId}'].get.responses['200']").exists())
+                .andExpect(jsonPath("$.components.securitySchemes.basicAuth.type").value("http"))
+                .andExpect(jsonPath("$.paths['/api/v2/transactions'].post.security[0].basicAuth").exists());
+    }
+
     private String validRequest(String transactionId) {
         return """
                 {
