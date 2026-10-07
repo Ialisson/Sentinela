@@ -4,18 +4,21 @@ services:
     profiles: [app]
     environment:
       SPRING_PROFILES_ACTIVE: api
+      API_USERNAME: ${API_USERNAME:-demo-client}
+      API_PASSWORD: ${API_PASSWORD:-local-demo-change-this}
+      API_CLIENTS_JSON: ${API_CLIENTS_JSON:-}
       OTEL_SERVICE_NAME: sentinela-api
       DATABASE_URL: jdbc:postgresql://postgres:5432/sentinela
-      DATABASE_USER: sentinela
-      DATABASE_PASSWORD: sentinela
+      DATABASE_USER: ${DATABASE_USER:-sentinela}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-local-db-secret}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: sentinela
-      RABBITMQ_PASSWORD: sentinela
+      RABBITMQ_USER: ${RABBITMQ_USER:-sentinela}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-local-rabbit-secret}
       REDIS_HOST: redis
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
     ports:
-      - "8080:8080"
-      - "8081:8081"
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8081:8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -33,15 +36,15 @@ services:
       SPRING_PROFILES_ACTIVE: worker
       OTEL_SERVICE_NAME: sentinela-risk-worker
       DATABASE_URL: jdbc:postgresql://postgres:5432/sentinela
-      DATABASE_USER: sentinela
-      DATABASE_PASSWORD: sentinela
+      DATABASE_USER: ${DATABASE_USER:-sentinela}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-local-db-secret}
       RABBITMQ_HOST: rabbitmq
-      RABBITMQ_USER: sentinela
-      RABBITMQ_PASSWORD: sentinela
+      RABBITMQ_USER: ${RABBITMQ_USER:-sentinela}
+      RABBITMQ_PASSWORD: ${RABBITMQ_PASSWORD:-local-rabbit-secret}
       REDIS_HOST: redis
       OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
     ports:
-      - "8082:8081"
+      - "127.0.0.1:8082:8081"
     depends_on:
       postgres:
         condition: service_healthy
@@ -56,10 +59,10 @@ services:
     image: postgres:16.6-alpine
     environment:
       POSTGRES_DB: sentinela
-      POSTGRES_USER: sentinela
-      POSTGRES_PASSWORD: sentinela
+      POSTGRES_USER: ${DATABASE_USER:-sentinela}
+      POSTGRES_PASSWORD: ${DATABASE_PASSWORD:-local-db-secret}
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
@@ -71,11 +74,11 @@ services:
   rabbitmq:
     image: rabbitmq:4.0.5-management-alpine
     environment:
-      RABBITMQ_DEFAULT_USER: sentinela
-      RABBITMQ_DEFAULT_PASS: sentinela
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER:-sentinela}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD:-local-rabbit-secret}
     ports:
-      - "5672:5672"
-      - "15672:15672"
+      - "127.0.0.1:5672:5672"
+      - "127.0.0.1:15672:15672"
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
       interval: 5s
@@ -86,7 +89,7 @@ services:
     image: redis:7.4.2-alpine
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:6379:6379"
     volumes:
       - redis_data:/data
 
@@ -99,14 +102,14 @@ services:
       - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
     depends_on: [api, worker]
 
   grafana:
     image: grafana/grafana:11.5.2
     environment:
-      GF_SECURITY_ADMIN_USER: admin
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-local-grafana-secret}
       GF_USERS_ALLOW_SIGN_UP: "false"
     volumes:
       - ./deploy/observability/grafana-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
@@ -114,7 +117,7 @@ services:
       - ./deploy/observability/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on: [prometheus]
 
   jaeger:
@@ -122,7 +125,7 @@ services:
     environment:
       COLLECTOR_OTLP_ENABLED: "true"
     ports:
-      - "16686:16686"
+      - "127.0.0.1:16686:16686"
 
   otel-collector:
     image: otel/opentelemetry-collector-contrib:0.120.0

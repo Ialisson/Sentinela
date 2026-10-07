@@ -11,7 +11,8 @@ import java.util.UUID;
 
 public interface TransactionRecordRepository extends JpaRepository<TransactionRecord, UUID> {
     Optional<TransactionRecord> findByTransactionId(String transactionId);
-    Optional<TransactionRecord> findByIdempotencyKey(String idempotencyKey);
+    Optional<TransactionRecord> findByClientIdAndIdempotencyKey(String clientId, String idempotencyKey);
+    Optional<TransactionRecord> findByTransactionIdAndClientId(String transactionId, String clientId);
 
     @Lock(LockModeType.PESSIMISTIC_WRITE)
     @Query("select t from TransactionRecord t where t.transactionId = :transactionId")

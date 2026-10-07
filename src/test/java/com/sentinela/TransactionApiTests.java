@@ -12,6 +12,8 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.security.test.context.support.WithMockUser;
+import org.springframework.security.test.context.support.WithAnonymousUser;
 import org.springframework.test.web.servlet.MockMvc;
 
 import java.math.BigDecimal;
@@ -23,12 +25,15 @@ import java.util.concurrent.TimeUnit;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.httpBasic;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @SpringBootTest
 @AutoConfigureMockMvc
 @ActiveProfiles({"api", "test"})
+@WithMockUser(username = "test-client", roles = "CLIENT")
 class TransactionApiTests {
 
     @Autowired
@@ -139,7 +144,7 @@ class TransactionApiTests {
                     if (!start.await(5, TimeUnit.SECONDS)) {
                         throw new IllegalStateException("Timed out waiting for concurrent start.");
                     }
-                    return submissionService.submit("key-006", request);
+                    return submissionService.submit("test-client", "key-006", request);
                 }));
             }
             org.junit.jupiter.api.Assertions.assertTrue(ready.await(5, TimeUnit.SECONDS));
@@ -150,6 +155,46 @@ class TransactionApiTests {
         }
         org.junit.jupiter.api.Assertions.assertEquals(1, transactions.count());
         org.junit.jupiter.api.Assertions.assertEquals(1, outbox.count());
+    }
+
+    @Test
+    @WithAnonymousUser
+    void requiresAuthentication() throws Exception {
+        mockMvc.perform(get("/api/v2/transactions/TXN001"))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    @WithAnonymousUser
+    void acceptsConfiguredBasicAuthentication() throws Exception {
+        mockMvc.perform(post("/api/v2/transactions")
+                        .with(httpBasic("test-client", "test-secret"))
+                        .header("Idempotency-Key", "basic-auth")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content(validRequest("TXN-BASIC")))
+                .andExpect(status().isAccepted());
+    }
+
+    @Test
+    void transactionsAreScopedToTheAuthenticatedClient() {
+        TransactionRequest request = new TransactionRequest("TXN-TENANT", "USER123", new BigDecimal("100.00"),
+                "BR", null, 1, 30);
+        submissionService.submit("test-client", "same-key", request);
+
+        org.junit.jupiter.api.Assertions.assertTrue(
+                transactions.findByTransactionIdAndClientId("TXN-TENANT", "another-client").isEmpty());
+        org.junit.jupiter.api.Assertions.assertTrue(
+                transactions.findByClientIdAndIdempotencyKey("another-client", "same-key").isEmpty());
+    }
+
+    @Test
+    @WithMockUser(username = "other-client", roles = "CLIENT")
+    void anotherAuthenticatedClientCannotReadTheTransaction() throws Exception {
+        submissionService.submit("test-client", "owner-only", new TransactionRequest("TXN-PRIVATE", "USER123",
+                new BigDecimal("100.00"), "BR", null, 1, 30));
+
+        mockMvc.perform(get("/api/v2/transactions/TXN-PRIVATE"))
+                .andExpect(status().isNotFound());
     }
 
     private String validRequest(String transactionId) {

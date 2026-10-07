@@ -12,6 +12,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.net.URI;
+import java.security.Principal;
 
 import static org.springframework.http.HttpStatus.NOT_FOUND;
 
@@ -32,20 +33,21 @@ public class TransactionController {
     @PostMapping
     public ResponseEntity<TransactionAccepted> submit(
             @RequestHeader("Idempotency-Key") String idempotencyKey,
-            @Valid @RequestBody TransactionRequest request) {
+            @Valid @RequestBody TransactionRequest request,
+            Principal principal) {
         if (idempotencyKey.isBlank() || idempotencyKey.length() > 100) {
             throw new ResponseStatusException(org.springframework.http.HttpStatus.BAD_REQUEST,
                     "Idempotency-Key must contain between 1 and 100 characters.");
         }
-        TransactionAccepted accepted = submissionService.submit(idempotencyKey, request);
+        TransactionAccepted accepted = submissionService.submit(principal.getName(), idempotencyKey, request);
         return ResponseEntity.accepted()
                 .location(URI.create("/api/v2/transactions/" + accepted.transactionId()))
                 .body(accepted);
     }
 
     @GetMapping("/{transactionId}")
-    public TransactionStatusResponse status(@PathVariable String transactionId) {
-        return transactions.findByTransactionId(transactionId)
+    public TransactionStatusResponse status(@PathVariable String transactionId, Principal principal) {
+        return transactions.findByTransactionIdAndClientId(transactionId, principal.getName())
                 .map(TransactionStatusResponse::from)
                 .orElseThrow(() -> new ResponseStatusException(NOT_FOUND, "Transaction not found."));
     }

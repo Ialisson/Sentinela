@@ -29,11 +29,11 @@ public class TransactionSubmissionService {
         this.transactionTemplate = transactionTemplate;
     }
 
-    public TransactionAccepted submit(String idempotencyKey, TransactionRequest request) {
+    public TransactionAccepted submit(String clientId, String idempotencyKey, TransactionRequest request) {
         try {
-            return transactionTemplate.execute(status -> submitInTransaction(idempotencyKey, request));
+            return transactionTemplate.execute(status -> submitInTransaction(clientId, idempotencyKey, request));
         } catch (org.springframework.dao.DataIntegrityViolationException concurrentRequest) {
-            TransactionRecord winner = transactions.findByIdempotencyKey(idempotencyKey).orElse(null);
+            TransactionRecord winner = transactions.findByClientIdAndIdempotencyKey(clientId, idempotencyKey).orElse(null);
             if (winner != null && winner.hasSameRequest(request)) {
                 return new TransactionAccepted(winner.transactionId(), winner.status());
             }
@@ -42,8 +42,8 @@ public class TransactionSubmissionService {
         }
     }
 
-    private TransactionAccepted submitInTransaction(String idempotencyKey, TransactionRequest request) {
-        TransactionRecord previous = transactions.findByIdempotencyKey(idempotencyKey).orElse(null);
+    private TransactionAccepted submitInTransaction(String clientId, String idempotencyKey, TransactionRequest request) {
+        TransactionRecord previous = transactions.findByClientIdAndIdempotencyKey(clientId, idempotencyKey).orElse(null);
         if (previous != null) {
             if (!previous.hasSameRequest(request)) {
                 throw new ResponseStatusException(CONFLICT, "Idempotency-Key was already used for a different request.");
@@ -60,7 +60,7 @@ public class TransactionSubmissionService {
             throw new ResponseStatusException(CONFLICT, "transactionId was already submitted with a different idempotency key.");
         }
 
-        TransactionRecord record = transactions.saveAndFlush(new TransactionRecord(idempotencyKey, request));
+        TransactionRecord record = transactions.saveAndFlush(new TransactionRecord(clientId, idempotencyKey, request));
         outbox.save(new OutboxEvent(record.transactionId()));
         return new TransactionAccepted(record.transactionId(), TransactionStatus.PENDING);
     }

@@ -32,12 +32,15 @@ O POST retorna `202 Accepted` assim que a transação e o evento de outbox são 
 docker compose --profile app up --build
 ```
 
-O Compose inicia PostgreSQL, RabbitMQ, Redis, API, worker, Prometheus, Grafana, Jaeger e OpenTelemetry Collector. As credenciais do Compose são apenas para desenvolvimento local; não use esses valores fora da máquina local.
+O Compose inicia PostgreSQL, RabbitMQ, Redis, API, worker, Prometheus, Grafana, Jaeger e OpenTelemetry Collector. As portas publicadas ficam vinculadas a `127.0.0.1`. Os valores padrão são somente para desenvolvimento local; configure segredos próprios fora desse cenário.
+
+A API exige HTTP Basic e associa cada transação ao usuário autenticado. Defina `API_USERNAME` e `API_PASSWORD` para um cliente ou `API_CLIENTS_JSON` para cadastrar vários clientes, por exemplo `{"cliente-a":"segredo-a","cliente-b":"segredo-b"}`. Senhas são armazenadas com hash BCrypt no processo. O endpoint retorna `404` se o cliente autenticado tentar consultar uma transação de outro cliente; a chave de idempotência é única por cliente.
 
 Enviar uma transação:
 
 ```bash
 curl -i http://localhost:8080/api/v2/transactions \
+  -u demo-client:local-demo-change-this \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: pedido-123-tentativa-1' \
   -d '{"transactionId":"TXN001","userId":"USER123","amount":9500.00,"country":"NG","ipAddress":"192.168.1.100","cardAttempts":5,"emailAgeDays":2}'
@@ -48,7 +51,7 @@ O mesmo `Idempotency-Key` e o mesmo corpo retornam a transação já criada sem 
 Consultar o resultado:
 
 ```bash
-curl http://localhost:8080/api/v2/transactions/TXN001
+curl -u demo-client:local-demo-change-this http://localhost:8080/api/v2/transactions/TXN001
 ```
 
 O worker aplica as regras: valor acima de BRL 5.000 (+40), país diferente de BR (+20), três ou mais tentativas (+25), e-mail com menos de sete dias (+30), e IP listado no Redis (+50). O score fica entre 0 e 100. Redis é uma fonte auxiliar; se estiver indisponível, a análise continua sem o sinal de IP e incrementa `sentinela.redis.failures`.
@@ -69,12 +72,12 @@ docker compose exec redis redis-cli SADD sentinela:suspicious-ips 203.0.113.10
 - Reivindicações do outbox expiram após dois minutos se o publicador parar antes de concluir.
 - O status `COMPLETED` e o lock pessimista por transação impedem aplicar efeitos duas vezes em mensagens repetidas ou concorrentes.
 
-O painel de gerenciamento do RabbitMQ em `http://localhost:15672` usa `sentinela` / `sentinela` neste ambiente local. A mensagem da DLQ pode ser inspecionada pelo painel.
+O painel de gerenciamento do RabbitMQ em `http://localhost:15672` usa `sentinela` / `local-rabbit-secret` por padrão neste ambiente local. A mensagem da DLQ pode ser inspecionada pelo painel.
 
 ## Observabilidade e carga
 
 - Prometheus: `http://localhost:9090`.
-- Grafana: `http://localhost:3000` (`admin` / `admin`, somente local).
+- Grafana: `http://localhost:3000` (`admin` / `local-grafana-secret`, somente local).
 - Jaeger: `http://localhost:16686`.
 - Métricas Actuator/Prometheus: porta de gerenciamento `8081` na API e `8082` no host para o worker.
 - Traces OTLP passam pelo Collector e chegam ao Jaeger.
@@ -94,12 +97,12 @@ O script registra taxa de falhas e latência da submissão assíncrona. Ainda n�
 ./mvnw test
 ```
 
-No Windows: `mvnw.cmd test`. Os testes de integração usam H2 para verificar idempotência, outbox, validação e reentrega sem depender de containers. O GitHub Actions executa `clean verify`, gera relatório JaCoCo e constrói a imagem Docker.
+No Windows: `mvnw.cmd verify`. O GitHub Actions executa `clean verify`, gera relatório JaCoCo e constrói a imagem Docker.
 
-Na última execução local de `verify` (7 de outubro de 2026), o JaCoCo mediu 69% de cobertura de instruções e 46% de branches; foram executados sete testes. Os testes usam H2 e não validam a query de lease contra PostgreSQL nem exercitam um broker RabbitMQ real. O relatório HTML é gerado em `target/site/jacoco/index.html`.
+Os testes rápidos usam H2. `DistributedFlowIntegrationTests` usa Testcontainers com PostgreSQL e RabbitMQ para validar as migrações, claims concorrentes, publicação, retries e DLQ; execute `mvnw verify` com Docker disponível para incluí-los. Sem um runtime Docker, esses testes são ignorados. O relatório JaCoCo é gerado em `target/site/jacoco/index.html`.
 
 ## Decisões e limites conhecidos
 
-As decisões estão em [`docs/adr`](docs/adr): RabbitMQ foi escolhido para execução local simples com DLQ; PostgreSQL é a fonte de verdade transacional; Redis guarda o conjunto auxiliar de IPs; Prometheus e OTLP/Jaeger dão visibilidade local ao fluxo. O schema principal é evoluído com Flyway em `src/main/resources/db/migration`; Hibernate valida o schema em vez de alterá-lo automaticamente.
+As decisões estão em [`docs/adr`](docs/adr): RabbitMQ foi escolhido para execução local simples com DLQ; PostgreSQL é a fonte de verdade transacional; Redis guarda o conjunto auxiliar de IPs; Prometheus e OTLP/Jaeger dão visibilidade local ao fluxo. O schema principal é evoluído com Flyway em `src/main/resources/db/migration`; Hibernate valida o schema em vez de alterá-lo automaticamente. A autenticação da API usa HTTP Basic sem sessão; em produção, publique-a somente atrás de TLS e injete os segredos por um gerenciador apropriado. Não exponha a porta de gerenciamento ou o endpoint Prometheus à internet.
 
 API e worker são executáveis separados, mas ainda compartilham o mesmo esquema PostgreSQL e o mesmo artefato. Isso deixa o projeto fácil de rodar e demonstra o fluxo distribuído sem simular independência de dados que ainda não existe. O próximo passo arquitetural é separar a propriedade dos dados e publicar um evento de conclusão para a API. Terraform/AWS, Kubernetes, banco NoSQL e um modelo de IA ficam para etapas futuras; nenhum custo, ganho de desempenho ou cobertura é alegado sem medição.

@@ -12,7 +12,7 @@ import java.util.UUID;
 
 @Entity
 @Table(name = "transactions", uniqueConstraints = {
-        @UniqueConstraint(name = "uk_transactions_idempotency_key", columnNames = "idempotency_key"),
+        @UniqueConstraint(name = "uk_transactions_client_idempotency_key", columnNames = {"client_id", "idempotency_key"}),
         @UniqueConstraint(name = "uk_transactions_transaction_id", columnNames = "transaction_id")
 })
 public class TransactionRecord {
@@ -26,6 +26,9 @@ public class TransactionRecord {
 
     @Column(name = "idempotency_key", nullable = false, length = 100)
     private String idempotencyKey;
+
+    @Column(name = "client_id", nullable = false, length = 100)
+    private String clientId;
 
     @Column(name = "user_id", nullable = false, length = 100)
     private String userId;
@@ -76,7 +79,8 @@ public class TransactionRecord {
     protected TransactionRecord() {
     }
 
-    public TransactionRecord(String idempotencyKey, TransactionRequest request) {
+    public TransactionRecord(String clientId, String idempotencyKey, TransactionRequest request) {
+        this.clientId = clientId;
         this.idempotencyKey = idempotencyKey;
         this.transactionId = request.transactionId();
         this.userId = request.userId();
@@ -87,6 +91,10 @@ public class TransactionRecord {
         this.emailAgeDays = request.emailAgeDays();
         this.status = TransactionStatus.PENDING;
         this.createdAt = Instant.now();
+    }
+
+    public TransactionRecord(String idempotencyKey, TransactionRequest request) {
+        this("legacy", idempotencyKey, request);
     }
 
     public TransactionRequest toRequest() {
@@ -124,6 +132,7 @@ public class TransactionRecord {
 
     public TransactionStatus status() { return status; }
     public String transactionId() { return transactionId; }
+    public String clientId() { return clientId; }
     public String idempotencyKey() { return idempotencyKey; }
     public Integer riskScore() { return riskScore; }
     public String riskLevel() { return riskLevel; }
