@@ -4,6 +4,7 @@ import com.sentinela.persistence.OutboxEventRepository;
 import com.sentinela.persistence.TransactionRecordRepository;
 import com.sentinela.dto.TransactionRequest;
 import com.sentinela.service.TransactionSubmissionService;
+import com.sentinela.service.DeadLetterFailureHandler;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,6 +43,9 @@ class TransactionApiTests {
     @Autowired
     private TransactionSubmissionService submissionService;
 
+    @Autowired
+    private DeadLetterFailureHandler deadLetterFailureHandler;
+
     @BeforeEach
     void clearDatabase() {
         outbox.deleteAll();
@@ -64,6 +68,21 @@ class TransactionApiTests {
 
         org.junit.jupiter.api.Assertions.assertEquals(1, transactions.count());
         org.junit.jupiter.api.Assertions.assertEquals(1, outbox.count());
+    }
+
+    @Test
+    void deadLetterMovesPendingTransactionToTerminalFailedState() throws Exception {
+        mockMvc.perform(post("/api/v2/transactions")
+                .header("Idempotency-Key", "key-dlq")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(validRequest("TXN-DLQ"))).andExpect(status().isAccepted());
+
+        deadLetterFailureHandler.markFailed("TXN-DLQ");
+
+        mockMvc.perform(get("/api/v2/transactions/TXN-DLQ"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("FAILED"))
+                .andExpect(jsonPath("$.failureReason").exists());
     }
 
     @Test

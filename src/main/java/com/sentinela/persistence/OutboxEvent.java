@@ -22,6 +22,9 @@ public class OutboxEvent {
     @Column(name = "published_at")
     private Instant publishedAt;
 
+    @Column(name = "locked_until")
+    private Instant lockedUntil;
+
     protected OutboxEvent() {
     }
 
@@ -34,4 +37,6 @@ public class OutboxEvent {
     public String transactionId() { return transactionId; }
     public boolean published() { return publishedAt != null; }
     public void markPublished() { publishedAt = Instant.now(); }
+    public void claimUntil(Instant until) { lockedUntil = until; }
+    public void releaseClaim() { lockedUntil = null; }
 }

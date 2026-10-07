@@ -22,7 +22,7 @@ flowchart LR
     Prom --> Grafana[Grafana]
 ```
 
-O POST retorna `202 Accepted` assim que a transação e o evento de outbox são persistidos. O publicador envia eventos pendentes ao RabbitMQ e espera a confirmação do broker. O worker calcula o risco e atualiza o estado no PostgreSQL; o cliente consulta o resultado pelo endpoint de status. O outbox cobre a falha entre persistir a transação e publicar a mensagem. Confirmações podem ser repetidas após falhas, portanto o worker usa lock de linha e estado persistido para tornar reentregas inofensivas.
+O POST retorna `202 Accepted` assim que a transação e o evento de outbox são persistidos. O publicador reivindica lotes usando locks `SKIP LOCKED` com lease, encerra a transação do banco antes de aguardar o RabbitMQ e grava a confirmação depois. Se cair antes de concluir, o lease expira e o evento pode ser publicado novamente; o worker usa lock de linha e estado persistido para tornar reentregas inofensivas.
 
 ## Executar localmente
 
@@ -64,7 +64,9 @@ docker compose exec redis redis-cli SADD sentinela:suspicious-ips 203.0.113.10
 - Fila de análise durável: `sentinela.risk.analysis`.
 - Retentativas locais: três retentativas com backoff exponencial após a entrega inicial.
 - Falhas persistentes são rejeitadas para a DLQ `sentinela.risk.analysis.dlq`.
+- A API consome a DLQ e move a transação de `PENDING` para `FAILED`; o endpoint de status expõe o motivo terminal.
 - A fila de outbox é armazenada no PostgreSQL, junto da transação, e marcada como publicada após confirmação do RabbitMQ.
+- Reivindicações do outbox expiram após dois minutos se o publicador parar antes de concluir.
 - O status `COMPLETED` e o lock pessimista por transação impedem aplicar efeitos duas vezes em mensagens repetidas ou concorrentes.
 
 O painel de gerenciamento do RabbitMQ em `http://localhost:15672` usa `sentinela` / `sentinela` neste ambiente local. A mensagem da DLQ pode ser inspecionada pelo painel.
@@ -94,10 +96,10 @@ O script registra taxa de falhas e latência da submissão assíncrona. Ainda n�
 
 No Windows: `mvnw.cmd test`. Os testes de integração usam H2 para verificar idempotência, outbox, validação e reentrega sem depender de containers. O GitHub Actions executa `clean verify`, gera relatório JaCoCo e constrói a imagem Docker.
 
-Na última execução local de `clean verify` (7 de outubro de 2026), o JaCoCo mediu 73% de cobertura de instruções e 46% de branches; foram executados seis testes. O relatório HTML é gerado em `target/site/jacoco/index.html`.
+Na última execução local de `verify` (7 de outubro de 2026), o JaCoCo mediu 69% de cobertura de instruções e 46% de branches; foram executados sete testes. Os testes usam H2 e não validam a query de lease contra PostgreSQL nem exercitam um broker RabbitMQ real. O relatório HTML é gerado em `target/site/jacoco/index.html`.
 
 ## Decisões e limites conhecidos
 
-As decisões estão em [`docs/adr`](docs/adr): RabbitMQ foi escolhido para execução local simples com DLQ; PostgreSQL é a fonte de verdade transacional; Redis guarda o conjunto auxiliar de IPs; Prometheus e OTLP/Jaeger dão visibilidade local ao fluxo.
+As decisões estão em [`docs/adr`](docs/adr): RabbitMQ foi escolhido para execução local simples com DLQ; PostgreSQL é a fonte de verdade transacional; Redis guarda o conjunto auxiliar de IPs; Prometheus e OTLP/Jaeger dão visibilidade local ao fluxo. O schema principal é evoluído com Flyway em `src/main/resources/db/migration`; Hibernate valida o schema em vez de alterá-lo automaticamente.
 
 API e worker são executáveis separados, mas ainda compartilham o mesmo esquema PostgreSQL e o mesmo artefato. Isso deixa o projeto fácil de rodar e demonstra o fluxo distribuído sem simular independência de dados que ainda não existe. O próximo passo arquitetural é separar a propriedade dos dados e publicar um evento de conclusão para a API. Terraform/AWS, Kubernetes, banco NoSQL e um modelo de IA ficam para etapas futuras; nenhum custo, ganho de desempenho ou cobertura é alegado sem medição.

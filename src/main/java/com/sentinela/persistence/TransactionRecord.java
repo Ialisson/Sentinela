@@ -67,6 +67,9 @@ public class TransactionRecord {
     @Column(name = "completed_at")
     private Instant completedAt;
 
+    @Column(name = "failure_reason", length = 500)
+    private String failureReason;
+
     @Version
     private long version;
 
@@ -101,7 +104,7 @@ public class TransactionRecord {
     }
 
     public void complete(RiskResponse response) {
-        if (status == TransactionStatus.COMPLETED) {
+        if (status != TransactionStatus.PENDING) {
             return;
         }
         status = TransactionStatus.COMPLETED;
@@ -109,6 +112,13 @@ public class TransactionRecord {
         riskLevel = response.riskLevel();
         recommendedAction = response.recommendedAction();
         triggeredRules = String.join(",", response.triggeredRules());
+        completedAt = Instant.now();
+    }
+
+    public void fail(String reason) {
+        if (status != TransactionStatus.PENDING) return;
+        status = TransactionStatus.FAILED;
+        failureReason = reason == null || reason.isBlank() ? "Risk analysis failed after retries." : reason;
         completedAt = Instant.now();
     }
 
@@ -125,4 +135,5 @@ public class TransactionRecord {
     }
     public Instant createdAt() { return createdAt; }
     public Instant completedAt() { return completedAt; }
+    public String failureReason() { return failureReason; }
 }

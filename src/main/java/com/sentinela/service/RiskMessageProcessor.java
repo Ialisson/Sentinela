@@ -22,7 +22,7 @@ public class RiskMessageProcessor {
     public boolean process(String transactionId) {
         TransactionRecord record = transactions.lockByTransactionId(transactionId)
                 .orElseThrow(() -> new IllegalStateException("Transaction does not exist: " + transactionId));
-        if (record.status() == com.sentinela.persistence.TransactionStatus.COMPLETED) {
+        if (record.status() != com.sentinela.persistence.TransactionStatus.PENDING) {
             return false;
         }
         record.complete(riskAnalysisService.analyze(record.toRequest()));

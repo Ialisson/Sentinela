@@ -13,12 +13,13 @@ public record TransactionStatusResponse(
         String riskLevel,
         String recommendedAction,
         List<String> triggeredRules,
+        String failureReason,
         Instant createdAt,
         Instant completedAt
 ) {
     public static TransactionStatusResponse from(TransactionRecord record) {
         return new TransactionStatusResponse(record.transactionId(), record.status(), record.riskScore(),
-                record.riskLevel(), record.recommendedAction(), record.triggeredRules(),
+                record.riskLevel(), record.recommendedAction(), record.triggeredRules(), record.failureReason(),
                 record.createdAt(), record.completedAt());
     }
 }
