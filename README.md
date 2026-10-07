@@ -91,7 +91,9 @@ Executar o cenário k6:
 docker compose --profile app --profile load-test run --rm k6
 ```
 
-O script registra taxa de falhas e latência da submissão assíncrona. Ainda não há números de throughput ou p95 publicados: o benchmark deve ser executado em ambiente controlado antes de documentar qualquer comparação.
+O cenário usa as credenciais locais do Compose, gera IDs exclusivos por execução e mede a latência da submissão HTTP (não o tempo até a análise terminar). Ele falha se erros excederem 1%, p95 exceder 1 s ou p99 exceder 2 s. Para outro ambiente, defina `API_USERNAME`, `API_PASSWORD` e `RUN_ID`; não passe credenciais de produção na linha de comando. Ainda não há números de throughput ou p95 publicados: o benchmark deve ser executado em ambiente controlado antes de documentar qualquer comparação.
+
+O Prometheus avalia alertas para indisponibilidade dos alvos, taxa de HTTP 5xx e acúmulo do outbox. A configuração é um ponto inicial para ambiente local; alertas operacionais exigem um Alertmanager e um destino de notificação configurados pelo operador.
 
 ## Testes e CI
 
@@ -105,6 +107,6 @@ Os testes rápidos usam H2. `DistributedFlowIntegrationTests` usa Testcontainers
 
 ## Decisões e limites conhecidos
 
-As decisões estão em [`docs/adr`](docs/adr): RabbitMQ foi escolhido para execução local simples com DLQ; PostgreSQL é a fonte de verdade transacional; Redis guarda o conjunto auxiliar de IPs; Prometheus e OTLP/Jaeger dão visibilidade local ao fluxo. O schema principal é evoluído com Flyway em `src/main/resources/db/migration`; Hibernate valida o schema em vez de alterá-lo automaticamente. A autenticação da API usa HTTP Basic sem sessão; em produção, publique-a somente atrás de TLS e injete os segredos por um gerenciador apropriado. Não exponha a porta de gerenciamento ou o endpoint Prometheus à internet.
+As decisões estão em [`docs/adr`](docs/adr): RabbitMQ foi escolhido para execução local simples com DLQ; PostgreSQL é a fonte de verdade transacional; Redis guarda o conjunto auxiliar de IPs; Prometheus e OTLP/Jaeger dão visibilidade local ao fluxo. Os ADRs 0005 e 0006 registram por que NoSQL e IA dependem de medições e dados representativos antes de serem adicionados. O schema principal é evoluído com Flyway em `src/main/resources/db/migration`; Hibernate valida o schema em vez de alterá-lo automaticamente. A autenticação da API usa HTTP Basic sem sessão; em produção, publique-a somente atrás de TLS e injete os segredos por um gerenciador apropriado. Não exponha a porta de gerenciamento ou o endpoint Prometheus à internet.
 
 API e worker são executáveis separados, mas ainda compartilham o mesmo esquema PostgreSQL e o mesmo artefato. Isso deixa o projeto fácil de rodar e demonstra o fluxo distribuído sem simular independência de dados que ainda não existe. O próximo passo arquitetural é separar a propriedade dos dados e publicar um evento de conclusão para a API. Terraform/AWS, Kubernetes, banco NoSQL e um modelo de IA ficam para etapas futuras; nenhum custo, ganho de desempenho ou cobertura é alegado sem medição.

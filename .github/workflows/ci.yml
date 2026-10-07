@@ -19,6 +19,24 @@ jobs:
           cache: maven
       - name: Run tests and coverage
         run: ./mvnw --batch-mode clean verify
+      - name: Require PostgreSQL and RabbitMQ integration tests
+        run: |
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+
+          reports = glob.glob('target/surefire-reports/TEST-com.sentinela.DistributedFlowIntegrationTests.xml')
+          if not reports:
+              raise SystemExit('DistributedFlowIntegrationTests report was not generated')
+          suite = ET.parse(reports[0]).getroot()
+          skipped = int(suite.attrib.get('skipped', '0'))
+          errors = int(suite.attrib.get('errors', '0'))
+          failures = int(suite.attrib.get('failures', '0'))
+          tests = int(suite.attrib.get('tests', '0'))
+          print(f'PostgreSQL/RabbitMQ integration tests: {tests} run, {skipped} skipped, {errors} errors, {failures} failures')
+          if tests == 0 or skipped or errors or failures:
+              raise SystemExit('Real database and broker integration tests must run successfully in CI')
+          PY
       - name: Upload coverage report
         uses: actions/upload-artifact@v4
         with:
