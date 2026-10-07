@@ -34,7 +34,9 @@ docker compose --profile app up --build
 
 O Compose inicia PostgreSQL, RabbitMQ, Redis, API, worker, Prometheus, Grafana, Jaeger e OpenTelemetry Collector. As portas publicadas ficam vinculadas a `127.0.0.1`. Os valores padrão são somente para desenvolvimento local; configure segredos próprios fora desse cenário.
 
-A API exige HTTP Basic e associa cada transação ao usuário autenticado. Defina `API_USERNAME` e `API_PASSWORD` para um cliente ou `API_CLIENTS_JSON` para cadastrar vários clientes, por exemplo `{"cliente-a":"segredo-a","cliente-b":"segredo-b"}`. Senhas são armazenadas com hash BCrypt no processo. O endpoint retorna `404` se o cliente autenticado tentar consultar uma transação de outro cliente; a chave de idempotência é única por cliente.
+A API exige HTTP Basic e associa cada transação ao usuário autenticado. Defina `API_USERNAME` e `API_PASSWORD` para um cliente ou `API_CLIENTS_JSON` para cadastrar vários clientes, por exemplo `{"cliente-a":"segredo-a","cliente-b":"segredo-b"}`. O verificador usa BCrypt e não grava credenciais no banco. O endpoint retorna `404` se o cliente autenticado tentar consultar uma transação de outro cliente; a chave de idempotência é única por cliente.
+
+A migração V4 atribui registros existentes ao proprietário `legacy`, pois o sistema anterior não guardava essa informação. Antes de migrar dados de produção, mapeie cada registro ao cliente correto; não dê acesso à identidade `legacy` sem revisar esse mapeamento.
 
 Enviar uma transação:
 
