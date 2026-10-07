@@ -6,6 +6,8 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.http.converter.HttpMessageNotReadableException;
+import org.springframework.dao.DataIntegrityViolationException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Map;
 import java.util.TreeMap;
@@ -34,5 +36,17 @@ public class ApiExceptionHandler {
     ProblemDetail handleUnreadableRequest(HttpMessageNotReadableException exception) {
         return ProblemDetail.forStatusAndDetail(HttpStatus.BAD_REQUEST,
                 "Request body is missing or contains invalid JSON.");
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    ProblemDetail handleUniqueConstraint(DataIntegrityViolationException exception) {
+        return ProblemDetail.forStatusAndDetail(HttpStatus.CONFLICT,
+                "The transaction or idempotency key has already been submitted.");
+    }
+
+    @ExceptionHandler(ResponseStatusException.class)
+    ProblemDetail handleResponseStatus(ResponseStatusException exception) {
+        HttpStatus status = HttpStatus.valueOf(exception.getStatusCode().value());
+        return ProblemDetail.forStatusAndDetail(status, exception.getReason() == null ? status.getReasonPhrase() : exception.getReason());
     }
 }

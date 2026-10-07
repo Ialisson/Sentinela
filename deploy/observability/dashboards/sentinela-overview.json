@@ -1,0 +1,54 @@
+{
+  "uid": "sentinela-overview",
+  "title": "Sentinela - Overview",
+  "tags": ["sentinela", "risk"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "time": { "from": "now-1h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP requests per second",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [{ "expr": "sum(rate(http_server_requests_seconds_count[1m])) by (job, uri, method)", "legendFormat": "{{job}} {{method}} {{uri}}", "refId": "A" }]
+    },
+    {
+      "id": 2,
+      "title": "HTTP p95 latency",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(http_server_requests_seconds_bucket[5m])) by (le, job, uri))", "legendFormat": "{{job}} {{uri}}", "refId": "A" }]
+    },
+    {
+      "id": 3,
+      "title": "Risk messages per second",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "targets": [{ "expr": "sum(rate(sentinela_risk_messages_total[5m])) by (result)", "legendFormat": "{{result}}", "refId": "A" }]
+    },
+    {
+      "id": 4,
+      "title": "Risk worker processing latency p95",
+      "type": "timeseries",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "fieldConfig": { "defaults": { "unit": "s" }, "overrides": [] },
+      "targets": [{ "expr": "histogram_quantile(0.95, sum(rate(sentinela_risk_processing_seconds_bucket[5m])) by (le, result))", "legendFormat": "{{result}}", "refId": "A" }]
+    },
+    {
+      "id": 5,
+      "title": "Scrape health",
+      "type": "stat",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 4, "w": 24, "x": 0, "y": 16 },
+      "targets": [{ "expr": "up{job=~\"sentinela-api|sentinela-worker\"}", "legendFormat": "{{job}}", "refId": "A" }]
+    }
+  ]
+}

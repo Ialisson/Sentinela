@@ -4,12 +4,14 @@ import com.sentinela.dto.RiskResponse;
 import com.sentinela.dto.TransactionRequest;
 import com.sentinela.strategy.RiskStrategy;
 import org.springframework.stereotype.Service;
+import org.springframework.context.annotation.Profile;
 
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 
 @Service
+@Profile("worker")
 public class RiskAnalysisService {
 
     private final List<RiskStrategy> strategies;

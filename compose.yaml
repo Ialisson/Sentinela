@@ -1,0 +1,148 @@
+services:
+  api:
+    build: .
+    profiles: [app]
+    environment:
+      SPRING_PROFILES_ACTIVE: api
+      OTEL_SERVICE_NAME: sentinela-api
+      DATABASE_URL: jdbc:postgresql://postgres:5432/sentinela
+      DATABASE_USER: sentinela
+      DATABASE_PASSWORD: sentinela
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: sentinela
+      RABBITMQ_PASSWORD: sentinela
+      REDIS_HOST: redis
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    ports:
+      - "8080:8080"
+      - "8081:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+
+  worker:
+    build: .
+    profiles: [app]
+    environment:
+      SPRING_PROFILES_ACTIVE: worker
+      OTEL_SERVICE_NAME: sentinela-risk-worker
+      DATABASE_URL: jdbc:postgresql://postgres:5432/sentinela
+      DATABASE_USER: sentinela
+      DATABASE_PASSWORD: sentinela
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_USER: sentinela
+      RABBITMQ_PASSWORD: sentinela
+      REDIS_HOST: redis
+      OTEL_EXPORTER_OTLP_ENDPOINT: http://otel-collector:4318/v1/traces
+    ports:
+      - "8082:8081"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      otel-collector:
+        condition: service_started
+
+  postgres:
+    image: postgres:16.6-alpine
+    environment:
+      POSTGRES_DB: sentinela
+      POSTGRES_USER: sentinela
+      POSTGRES_PASSWORD: sentinela
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sentinela -d sentinela"]
+      interval: 5s
+      timeout: 3s
+      retries: 15
+
+  rabbitmq:
+    image: rabbitmq:4.0.5-management-alpine
+    environment:
+      RABBITMQ_DEFAULT_USER: sentinela
+      RABBITMQ_DEFAULT_PASS: sentinela
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+
+  redis:
+    image: redis:7.4.2-alpine
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    volumes:
+      - ./deploy/observability/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+    depends_on: [api, worker]
+
+  grafana:
+    image: grafana/grafana:11.5.2
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    volumes:
+      - ./deploy/observability/grafana-datasource.yml:/etc/grafana/provisioning/datasources/prometheus.yml:ro
+      - ./deploy/observability/grafana-dashboards.yml:/etc/grafana/provisioning/dashboards/sentinela.yml:ro
+      - ./deploy/observability/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "3000:3000"
+    depends_on: [prometheus]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.65.0
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports:
+      - "16686:16686"
+
+  otel-collector:
+    image: otel/opentelemetry-collector-contrib:0.120.0
+    command: ["--config=/etc/otel-collector-config.yaml"]
+    volumes:
+      - ./deploy/observability/otel-collector.yaml:/etc/otel-collector-config.yaml:ro
+    depends_on: [jaeger]
+
+  k6:
+    image: grafana/k6:0.55.0
+    profiles: [load-test]
+    volumes:
+      - ./perf:/scripts:ro
+    environment:
+      BASE_URL: http://api:8080
+    depends_on: [api]
+    entrypoint: ["k6", "run", "/scripts/transactions.js"]
+
+volumes:
+  postgres_data:
+  redis_data:
+  prometheus_data:
+  grafana_data:
